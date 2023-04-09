@@ -7,7 +7,7 @@
   <meta name="keyword" content="">
   <title>
     
-      house_of_snake:_IO_printf_buffer_as_file_jumps利用分析 | 7resp4ss&#39;s blog
+      house_of_snake：一条高版本Glibc IO调用链 | 7resp4ss&#39;s blog
     
   </title>
   <!-- <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css"> -->
@@ -101,12 +101,12 @@
 </header>
 
     <div id="article-banner">
-  <h2>house_of_snake:_IO_printf_buffer_as_file_jumps利用分析</h2>
+  <h2>house_of_snake：一条高版本Glibc IO调用链</h2>
 </div>
 
 <main class="app-body">
   <article class="post-article">
-    <section class="markdown-content"   dir=""><h1 id="house-of-snake：-IO-printf-buffer-as-file-jumps利用分析"><a href="#house-of-snake：-IO-printf-buffer-as-file-jumps利用分析" class="headerlink" title="house_of_snake：_IO_printf_buffer_as_file_jumps利用分析"></a>house_of_snake：_IO_printf_buffer_as_file_jumps利用分析</h1><blockquote>
+    <section class="markdown-content"   dir=""><h1 id="house-of-snake：一条高版本Glibc-IO调用链"><a href="#house-of-snake：一条高版本Glibc-IO调用链" class="headerlink" title="house_of_snake：一条高版本Glibc IO调用链"></a>house_of_snake：一条高版本Glibc IO调用链</h1><blockquote>
 <p>本文首发于[<a target="_blank" rel="noopener" href="https://bbs.kanxue.com/thread-276471.htm">看雪论坛</a>]，仅在个人博客记录</p>
 </blockquote>
 <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>之前听说<code>glibc2.37</code>删除了<code>_IO_obstack_jumps</code>这个<code>vtable</code>。但是在源码里还看到<code>obstack</code>结构体存在，那么<code>glibc2.37</code>真的不能再调用<code>_IO_obstack_jumps</code>的那条链吗？看完本文就知道还可以调用_<code>IO_obstack_jumps</code>那条链的关键部分。但目前这条链只存在<code>glibc2.37</code>，所以现在可能还没有利用场景。在此结合源码和自己的理解和大家分享一下，也感谢<code>roderick</code>师傅和<code>whiter</code>师傅的指导与支持。如果有哪里不对恳请师傅们斧正！</p>
@@ -161,7 +161,7 @@
 <p>然后有判断：<code>if (!__printf_buffer_has_failed (file-&gt;next) &amp;&amp; file-&gt;next-&gt;write_ptr == file-&gt;next-&gt;write_end)</code></p>
 <p>就是判断<code>__printf_buffer_as_file</code>结构体中的mode成员是不是<code>__printf_buffer_mode_failed</code>以及<code>file-&gt;next-&gt;write_ptr == file-&gt;next-&gt;write_end</code>，我们假设满足这两个条件，会调用<code>__printf_buffer_flush (file-&gt;next)</code></p>
 <h6 id="printf-buffer-flush-函数"><a href="#printf-buffer-flush-函数" class="headerlink" title="__printf_buffer_flush 函数"></a>__printf_buffer_flush 函数</h6><p>这个函数笔者无法直接在源码中找到，但是配合<code>gdb</code>，笔者还是发现了它的蛛丝马迹。</p>
-<p>![image-20230313223405618](一条新的glibc IO_FILE利用链：_IO_printf_buffer_as_file_jumps利用分析.assets&#x2F;image-20230313223405618.png)</p>
+<p><img src="https://img2023.cnblogs.com/blog/2969846/202304/2969846-20230409132204789-1333388314.png" alt="image-20230313223405618"></p>
 <p><del>它其实就是<code>__printf_buffer_do_flush</code></del></p>
 <p>评论区有师傅（id:我超啊）说该函数其实是<code>__printf_buffer_flush =&gt; Xprintf_buffer_flush =&gt; Xprintf (buffer_do_flush) (buf) =&gt; __printf_buffer_do_flush</code>这样的！但是我们只需要关注<code>__printf_buffer_do_flush</code>，源码如下：</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="type">void</span></span><br><span class="line">__printf_buffer_do_flush (<span class="keyword">struct</span> __printf_buffer *buf)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">switch</span> (buf-&gt;mode)</span><br><span class="line">    &#123;</span><br><span class="line">    <span class="keyword">case</span> __printf_buffer_mode_failed:</span><br><span class="line">    <span class="keyword">case</span> __printf_buffer_mode_sprintf:</span><br><span class="line">      <span class="keyword">return</span>;</span><br><span class="line">    <span class="keyword">case</span> __printf_buffer_mode_snprintf:</span><br><span class="line">      __printf_buffer_flush_snprintf ((<span class="keyword">struct</span> __printf_buffer_snprintf *) buf);</span><br><span class="line">      <span class="keyword">return</span>;</span><br><span class="line">	......</span><br><span class="line">    <span class="keyword">case</span> __printf_buffer_mode_fphex_to_wide:</span><br><span class="line">      __printf_buffer_flush_fphex_to_wide</span><br><span class="line">        ((<span class="keyword">struct</span> __printf_buffer_fphex_to_wide *) buf);</span><br><span class="line">      <span class="keyword">return</span>;</span><br><span class="line">    <span class="keyword">case</span> __printf_buffer_mode_obstack:</span><br><span class="line">      __printf_buffer_flush_obstack ((<span class="keyword">struct</span> __printf_buffer_obstack *) buf);</span><br><span class="line">      <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  __builtin_trap ();</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
@@ -220,7 +220,7 @@
 <p>我们调试可以知道<code>_IO_overflow</code>位于<code>vtable</code>指针所指向地址<code>+0x18</code>处，也就是说当<code>FSOP</code>发生的时候会调用<code>_IO_FILE_plus.vtable</code> 中的<code>_IO_overflow</code>。即调用<code>vtable</code>指针所指向地址 <code>+ 0x18</code>处的数据。</p>
 <p>![image-20221124020727031](一条新的glibc IO_FILE利用链：_IO_printf_buffer_as_file_jumps利用分析.assets&#x2F;image-20221124020727031.png)</p>
 <p>那么只要我们伪造一个<code>_IO_FILE</code>结构体，将它的<code>vtable</code>替换为<code>&amp;_IO_printf_buffer_as_file_jumps</code>，此时<code>vtable</code>指针所指地址<code>+0x18</code>处为<code>__printf_buffer_as_file_overflow</code>，然后伪造上述所有需要满足的条件（详见<code>poc</code>与攻击模板），就可以完成攻击，如下：</p>
-<p>![image-20230314114950044](一条新的glibc IO_FILE利用链：_IO_printf_buffer_as_file_jumps利用分析.assets&#x2F;image-20230314114950044.png)</p>
+<p><img src="https://img2023.cnblogs.com/blog/2969846/202304/2969846-20230409132205697-638162855.png" alt="image-20230314114950044"></p>
 <h2 id="POC"><a href="#POC" class="headerlink" title="POC"></a>POC</h2><ul>
 <li><p>下载<code>glibc2.37</code>源码：</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wget https://mirrors.nju.edu.cn/gnu/libc/glibc-2.37.tar.gz</span><br></pre></td></tr></table></figure>
@@ -241,7 +241,7 @@
 <figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">patchelf --set-rpath 你存放编译后的文件路径/bin/lib ./POC </span><br><span class="line">patchelf --set-interpreter  你存放编译后的文件路径/bin/lib/ld-linux-x86-64.so.2 ./POC</span><br></pre></td></tr></table></figure>
 </li>
 <li><p>运行</p>
-<p>![image-20230314154110136](一条新的glibc IO_FILE利用链：_IO_printf_buffer_as_file_jumps利用分析.assets&#x2F;image-20230314154110136.png)</p>
+<p><img src="https://img2023.cnblogs.com/blog/2969846/202304/2969846-20230409132206082-1650998011.png" alt="image-20230314154110136"></p>
 </li>
 </ul>
 <h2 id="攻击模板"><a href="#攻击模板" class="headerlink" title="攻击模板"></a>攻击模板</h2><p>以下攻击模板全是在<code>FSOP</code>下的，可以点击<a target="_blank" rel="noopener" href="https://share.weiyun.com/iSWjdvGY">这里</a>下载附件尝试以下三种攻击。</p>
@@ -344,8 +344,8 @@
 </div>
     <footer class="app-footer">
   <p class="copyright">
-    &copy; 2023 | مبني على
-           <a href="https://hexo.io" target="_blank">هيكسو</a>
+    &copy; 2023 | Powered by
+           <a href="https://hexo.io" target="_blank">Hexo</a>
     <br>
     <a target="_blank" rel="noopener" href="https://github.com/bluemix/hexo-theme-rexo">Rexo</a>
   </p>
