@@ -67,15 +67,6 @@
       
         <li class="list-item" >
           <!-- <div class="tooltip"> -->
-            <!-- <span class="tooltiptext">📟</span> -->
-
-            
-            <a href="/projects/" class="item-link">📟</a>
-          
-        </li>
-      
-        <li class="list-item" >
-          <!-- <div class="tooltip"> -->
             <!-- <span class="tooltiptext">👨🏻‍💻</span> -->
 
             
@@ -100,12 +91,6 @@
         
           <li class="menu-item">
             
-              <a href="/projects/" class="menu-link">📟</a>
-            
-          </li>
-        
-          <li class="menu-item">
-            
               <a href="/about/" class="menu-link">👨🏻‍💻</a>
             
           </li>
@@ -122,7 +107,7 @@
 <main class="app-body">
   <article class="post-article">
     <section class="markdown-content"   dir=""><h1 id="house-of-snake：-IO-printf-buffer-as-file-jumps利用分析"><a href="#house-of-snake：-IO-printf-buffer-as-file-jumps利用分析" class="headerlink" title="house_of_snake：_IO_printf_buffer_as_file_jumps利用分析"></a>house_of_snake：_IO_printf_buffer_as_file_jumps利用分析</h1><blockquote>
-<p>本文首发于[看雪论坛]([<a target="_blank" rel="noopener" href="https://bbs.kanxue.com/thread-276471.htm">原创]一条新的glibc IO_FILE利用链：__printf_buffer_as_file_overflow利用分析-Pwn-看雪论坛-安全社区|安全招聘|bbs.pediy.com (kanxue.com)</a>)，仅在个人博客记录</p>
+<p>本文首发于[<a target="_blank" rel="noopener" href="https://bbs.kanxue.com/thread-276471.htm">看雪论坛</a>]，仅在个人博客记录</p>
 </blockquote>
 <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>之前听说<code>glibc2.37</code>删除了<code>_IO_obstack_jumps</code>这个<code>vtable</code>。但是在源码里还看到<code>obstack</code>结构体存在，那么<code>glibc2.37</code>真的不能再调用<code>_IO_obstack_jumps</code>的那条链吗？看完本文就知道还可以调用_<code>IO_obstack_jumps</code>那条链的关键部分。但目前这条链只存在<code>glibc2.37</code>，所以现在可能还没有利用场景。在此结合源码和自己的理解和大家分享一下，也感谢<code>roderick</code>师傅和<code>whiter</code>师傅的指导与支持。如果有哪里不对恳请师傅们斧正！</p>
 <h2 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h2><p>在此，我称这条链为<code>house of snake</code>，此利用链与<code>house of apple</code>、<code>house of cat</code>、<code>house of emma</code>等利用一样，利用了修改虚表指针的方法。主要思路就是伪造相关结构体并且修改虚表指针为<code>_IO_printf_buffer_as_file_jumps</code>实现攻击。</p>
@@ -273,7 +258,7 @@
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> __<span class="title">printf_buffer_obstack</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> __<span class="title">printf_buffer</span> <span class="title">base</span>;</span>	<span class="number">0x0</span><span class="number">-0x24</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">obstack</span> *<span class="title">obstack</span>;</span>		<span class="number">0x28</span><span class="number">-0x30</span></span><br><span class="line"></span><br><span class="line">  <span class="type">char</span> ch;	<span class="number">0x30</span><span class="number">-0x31</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 </section>
     
-    <p class="post-date" dir="">2023年4月9日</p>
+    <p class="post-date" dir="">April 9, 2023</p>
 
     
       <div class="tags"    dir="">
