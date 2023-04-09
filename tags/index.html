@@ -7,7 +7,7 @@
   <meta name="keyword" content="">
   <title>
     
-      7resp4ss&#39;s blog
+      Tags | 7resp4ss&#39;s blog
     
   </title>
   <!-- <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css"> -->
@@ -46,7 +46,7 @@
   </script>
 
 
-</head>
+<meta name="generator" content="Hexo 6.3.0"></head>
   <body>
     <header class="header fixed-header">
   <div class="header-container">
@@ -101,34 +101,28 @@
 </header>
 
     <div id="article-banner">
-  <h2>الأرشيف</h2>
+  <h2>التاگات</h2>
 </div>
-<main class="app-body" id="archives">
-  
-  
-  
-    <section class="time-section">
-  <h1 class="section-year">
-    2023
-  </h1>
-  <div class="section-list">
-    
-    
-      <div class="section-list-item">
-        <a href="/2023/04/09/hello-world/" class="archive-title">Hello World</a>
-        <p class="archive-date">04-09</p>
-      </div>
+<main class="app-body">
+  <div id="tag-cloud">
     
   </div>
-</section>
   
 </main>
 
 <script>
   (function () {
-    var url = 'https://7resp4ss.github.io/archives/2023/04/index.html';
-    $('#article-banner').geopattern(url);
-    $('.header').removeClass('fixed-header');
+    var url = 'https://7resp4ss.github.io/tags/index.html'
+    $('#article-banner').geopattern(url)
+    $('.header').removeClass('fixed-header')
+
+    var tag = location.hash.replace('#', '')
+    if (tag) {
+      var tagId = "#tag-" + tag;
+      $("html, body").animate({
+        scrollTop: $(tagId).offset().top 
+      }, 400)
+    }
   })();
 </script>
     <div class="scroll-top">
