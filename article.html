@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="house_of_snake：一条高版本 Glibc IO 调用链">
+  <title>house_of_snake / 7RESP4SS</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="pixel-theme.css">
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body class="article-page">
+  <canvas class="swirl-background" aria-hidden="true"></canvas>
+  <canvas class="ambient-grid" aria-hidden="true"></canvas>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="7RESP4SS 首页">
+      <span class="brand-copy"><strong>7RESP4SS</strong><small>TECH BLOG</small></span>
+    </a>
+    <nav class="desktop-nav" aria-label="主导航">
+      <a class="active" href="index.html">博客</a><a href="topics.html">专题</a><a href="archive.html">归档</a><a href="index.html#about">关于</a>
+    </nav>
+    <div class="header-actions">
+      <span class="lab-status"><i></i> LAB ONLINE</span>
+      <button class="icon-button search-trigger" type="button" aria-label="搜索" title="搜索"><i data-lucide="search"></i></button>
+      <button class="icon-button theme-toggle" type="button" aria-label="切换明暗主题" title="切换明暗主题"><i data-lucide="sun"></i></button>
+      <button class="icon-button menu-toggle" type="button" aria-label="打开菜单" title="菜单" aria-expanded="false"><i data-lucide="menu"></i></button>
+    </div>
+  </header>
+  <div class="mobile-menu" hidden><a href="index.html">博客</a><a href="topics.html">专题</a><a href="archive.html">归档</a><a href="index.html#about">关于</a></div>
+
+  <main class="article-layout">
+    <header class="article-hero">
+      <a class="back-link" href="index.html"><i data-lucide="arrow-left"></i> 返回博客</a>
+      <div class="article-classification"><span>RESEARCH NOTE 001</span><span>GLIBC / FSOP</span></div>
+      <h1>house_of_snake：<br><em>一条高版本 Glibc IO 调用链</em></h1>
+      <p class="article-deck">分析 glibc 2.37 中 <code>_IO_printf_buffer_as_file_jumps</code> 如何重新抵达 obstack 的关键调用路径。</p>
+      <div class="article-byline"><span>BY 7RESP4SS</span><time datetime="2023-04-09">2023.04.09</time><span>8 MIN READ</span></div>
+    </header>
+
+    <aside class="article-toc" aria-label="文章目录">
+      <span>ON THIS PAGE</span>
+      <a class="active" href="#preface">01 / 前言</a>
+      <a href="#overview">02 / 利用概览</a>
+      <a href="#chain">03 / 调用链分析</a>
+      <a href="#conditions">04 / 必要条件</a>
+      <div class="toc-progress"><i></i></div>
+    </aside>
+
+    <article class="article-content">
+      <div class="article-lead" id="preface">
+        <span class="section-index">01</span>
+        <div><h2>前言</h2><p>glibc 2.37 删除了 <code>_IO_obstack_jumps</code> 这个 vtable，但 obstack 结构体仍然存在。沿着新加入的 printf buffer 路径继续追踪，仍然可以抵达这条调用链的关键部分。</p></div>
+      </div>
+
+      <figure class="research-figure">
+        <img src="assets/house-of-snake.png" alt="house of snake 调用链调试结果">
+        <figcaption><span>FIG. 01</span> 在 GDB 中验证伪造结构体后的控制流</figcaption>
+      </figure>
+
+      <section id="overview">
+        <span class="section-index">02</span>
+        <h2>利用概览</h2>
+        <p>这条链与 house of apple、house of cat 等利用思路类似，核心仍是伪造相关结构体，并将虚表指针修改为 <code>_IO_printf_buffer_as_file_jumps</code>。</p>
+        <div class="call-chain" aria-label="调用链">
+          <span>FSOP</span><i data-lucide="arrow-right"></i><span>OVERFLOW</span><i data-lucide="arrow-right"></i><span>BUFFER FLUSH</span><i data-lucide="arrow-right"></i><span>OBSTACK</span>
+        </div>
+      </section>
+
+      <section id="chain">
+        <span class="section-index">03</span>
+        <h2>调用链分析</h2>
+        <p>在 glibc 2.24 之后，虚函数调用前会验证 vtable 是否位于合法的 <code>_IO_vtable</code> 段中。glibc 2.37 新增的合法虚表给出了新的入口：</p>
+        <pre><div class="code-head"><span>C / GLIBC 2.37</span><button class="copy-code" type="button"><i data-lucide="copy"></i> COPY</button></div><code>static const struct _IO_jump_t
+_IO_printf_buffer_as_file_jumps libio_vtable =
+{
+  JUMP_INIT_DUMMY,
+  JUMP_INIT(finish, NULL),
+  JUMP_INIT(overflow, __printf_buffer_as_file_overflow),
+  JUMP_INIT(underflow, NULL),
+  JUMP_INIT(xsputn, __printf_buffer_as_file_xsputn),
+  // ...
+};</code></pre>
+        <p>当 FSOP 触发 <code>_IO_overflow</code>，控制流进入 <code>__printf_buffer_as_file_overflow</code>。满足 buffer mode 与指针约束后，flush 分支最终抵达 <code>_obstack_newchunk</code>。</p>
+      </section>
+
+      <figure class="research-figure">
+        <img src="assets/vtable-debug.png" alt="GDB 中 vtable 偏移与调用位置">
+        <figcaption><span>FIG. 02</span> vtable 指针 +0x18 对应的 overflow 调用位置</figcaption>
+      </figure>
+
+      <section id="conditions">
+        <span class="section-index">04</span>
+        <h2>完成调用链的必要条件</h2>
+        <ul class="condition-list">
+          <li><span>01</span><p><code>file-&gt;next-&gt;mode</code> 必须设置为 <code>__printf_buffer_mode_obstack</code>。</p></li>
+          <li><span>02</span><p>stream 与 next buffer 的 write base、write ptr 和 write end 需要保持一致。</p></li>
+          <li><span>03</span><p>控制 obstack 的 <code>chunkfun</code> 与 <code>extra_arg</code>，最终获得目标调用。</p></li>
+        </ul>
+      </section>
+
+      <aside class="article-note"><span>NOTE</span><p>本文原始研究首发于看雪论坛。原文、完整 POC 与攻击模板会在正式迁移时完整保留。</p></aside>
+
+      <footer class="article-end"><span>END OF RESEARCH NOTE 001</span><a href="index.html">返回索引 <i data-lucide="arrow-right"></i></a></footer>
+    </article>
+  </main>
+
+  <footer class="site-footer"><span>© 2026 7RESP4SS</span><span>BUILT FOR THE OPEN WEB</span><a href="#">RSS FEED</a></footer>
+
+  <dialog class="search-dialog">
+    <form method="dialog" class="search-shell">
+      <div class="search-input-wrap"><i data-lucide="search"></i><input type="search" placeholder="搜索文章、标签或关键字..." aria-label="搜索文章"><button type="submit">ESC</button></div>
+      <div class="search-results"><span class="search-hint">INDEXED ENTRY / 01</span><a href="article.html" data-search-result="house of snake glibc fsop io attack 高版本 调用链"><span>2023.04.09</span><strong>house_of_snake：一条高版本 Glibc IO 调用链</strong><i data-lucide="arrow-up-right"></i></a><p class="empty-result" hidden>没有匹配的研究记录。</p></div>
+    </form>
+  </dialog>
+</body>
+</html>
