@@ -66,32 +66,36 @@
         vec2 screen = gl_FragCoord.xy;
         float pixelSize = max(5.0, length(resolution) / 210.0);
         vec2 uv = (floor(screen / pixelSize) * pixelSize - 0.5 * resolution) / resolution.y;
-        float speed = time * 0.055;
+        float speed = time * 0.11;
         float radius = length(uv);
-        float angle = atan(uv.y, uv.x) + speed * (0.55 + radius * 0.18);
+        float angle = atan(uv.y, uv.x) + speed * (0.9 + radius * 0.32);
         uv = vec2(cos(angle), sin(angle)) * radius;
         vec2 warped = uv;
         float pulse = 0.0;
-        for (int i = 0; i < 4; i++) {
-          warped += 0.34 * vec2(cos(warped.y * 3.7 + speed), sin(warped.x * 3.1 - speed));
-          warped += 0.12 * vec2(sin(warped.y * 7.0), cos(warped.x * 6.0));
-          pulse += sin(warped.x * 4.0 + warped.y * 3.0 + speed) * 0.08;
+        for (int i = 0; i < 5; i++) {
+          warped += 0.36 * vec2(cos(warped.y * 3.7 + speed), sin(warped.x * 3.1 - speed));
+          warped += 0.14 * vec2(sin(warped.y * 7.0 + speed * 0.7), cos(warped.x * 6.0 - speed * 0.5));
+          pulse += sin(warped.x * 4.0 + warped.y * 3.0 + speed) * 0.09;
         }
-        float bands = 0.5 + 0.5 * sin((warped.x * 2.1 - warped.y * 3.2 + radius * 5.0) + pulse);
-        float edge = smoothstep(1.15, 0.08, radius);
-        vec3 darkA = vec3(0.035, 0.055, 0.15);
-        vec3 darkB = vec3(0.12, 0.20, 0.34);
-        vec3 darkC = vec3(0.38, 0.52, 0.29);
-        vec3 lightA = vec3(0.36, 0.47, 0.45);
-        vec3 lightB = vec3(0.57, 0.67, 0.55);
-        vec3 lightC = vec3(0.73, 0.78, 0.48);
-        vec3 c1 = mix(darkA, lightA, lightMode);
-        vec3 c2 = mix(darkB, lightB, lightMode);
-        vec3 c3 = mix(darkC, lightC, lightMode);
-        vec3 color = mix(c1, c2, smoothstep(0.12, 0.58, bands));
-        color = mix(color, c3, smoothstep(0.55, 0.98, bands) * 0.55);
-        color *= edge * 0.78;
-        gl_FragColor = vec4(color, edge * 0.82);
+        float bands = 0.5 + 0.5 * sin(warped.x * 2.4 - warped.y * 3.4 + radius * 7.0 + pulse);
+        float veins = 0.5 + 0.5 * cos(warped.x * 6.0 + warped.y * 2.2 - speed * 1.4);
+        vec3 darkPurple = vec3(0.055, 0.008, 0.11);
+        vec3 darkRed = vec3(0.25, 0.008, 0.035);
+        vec3 crimson = vec3(0.62, 0.015, 0.12);
+        vec3 neonMagenta = vec3(0.95, 0.025, 0.52);
+        vec3 lightPurple = vec3(0.22, 0.10, 0.30);
+        vec3 lightRed = vec3(0.46, 0.08, 0.12);
+        vec3 lightCrimson = vec3(0.72, 0.16, 0.26);
+        vec3 lightNeon = vec3(0.92, 0.20, 0.58);
+        vec3 c1 = mix(darkPurple, lightPurple, lightMode);
+        vec3 c2 = mix(darkRed, lightRed, lightMode);
+        vec3 c3 = mix(crimson, lightCrimson, lightMode);
+        vec3 c4 = mix(neonMagenta, lightNeon, lightMode);
+        vec3 color = mix(c1, c2, smoothstep(0.04, 0.48, bands));
+        color = mix(color, c3, smoothstep(0.42, 0.78, bands));
+        color = mix(color, c4, smoothstep(0.76, 0.99, bands) * (0.45 + veins * 0.4));
+        color += c4 * pow(max(veins - 0.72, 0.0), 3.0) * 1.8;
+        gl_FragColor = vec4(color, 0.96);
       }
     `;
     const compile = (type, source) => {
@@ -117,7 +121,7 @@
     const time = gl.getUniformLocation(program, 'time');
     const lightMode = gl.getUniformLocation(program, 'lightMode');
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    swirlState = { gl, program, buffer, position, resolution, time, lightMode, reduced, started: performance.now() };
+    swirlState = { gl, program, buffer, position, resolution, time, lightMode, reduced, started: performance.now(), lastFrame: 0 };
     resizeSwirl();
     if (!reduced) requestAnimationFrame(renderSwirl);
     else renderSwirl(performance.now());
@@ -125,7 +129,7 @@
 
   function resizeSwirl() {
     if (!swirlState || !swirlCanvas) return;
-    const ratio = Math.min(window.devicePixelRatio || 1, 1.25);
+    const ratio = Math.max(0.5, Math.min(window.devicePixelRatio || 1, 1) * 0.65);
     swirlCanvas.width = Math.max(1, Math.floor(window.innerWidth * ratio));
     swirlCanvas.height = Math.max(1, Math.floor(window.innerHeight * ratio));
     swirlState.gl.viewport(0, 0, swirlCanvas.width, swirlCanvas.height);
@@ -133,6 +137,11 @@
 
   function renderSwirl(now) {
     if (!swirlState || !swirlCanvas) return;
+    if (!swirlState.reduced && now - swirlState.lastFrame < 33) {
+      requestAnimationFrame(renderSwirl);
+      return;
+    }
+    swirlState.lastFrame = now;
     const { gl, program, buffer, position, resolution, time, lightMode, started, reduced } = swirlState;
     gl.useProgram(program);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -176,6 +185,7 @@
     localStorage.setItem('7r-theme', root.dataset.theme || 'dark');
     setThemeIcon();
     drawGrid();
+    if (swirlState?.reduced) renderSwirl(performance.now());
   });
 
   const menuButton = document.querySelector('.menu-toggle');
