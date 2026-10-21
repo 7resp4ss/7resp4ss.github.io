@@ -1,8 +1,13 @@
 (() => {
-  const root = document.documentElement;
   const canvas = document.querySelector('.ambient-grid');
   const swirlCanvas = document.querySelector('.swirl-background');
   const ctx = canvas?.getContext('2d');
+  const timestampSeed = Date.now();
+  const seededValue = (salt) => {
+    const value = Math.sin(timestampSeed * 0.001 + salt * 91.345) * 47453.5453;
+    return value - Math.floor(value);
+  };
+  const shaderSeed = new Float32Array([seededValue(1), seededValue(2), seededValue(3), seededValue(4)]);
   let swirlState = null;
 
   function drawGrid() {
@@ -15,11 +20,10 @@
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
-    const light = root.dataset.theme === 'light';
     const unit = 32;
     const width = window.innerWidth;
     const height = window.innerHeight;
-    const sky = light ? ['#d2dfd2', '#bdcfcb', '#a9c0c0'] : ['#151a36', '#20294a', '#2d3b59'];
+    const sky = ['#160b24', '#24102f', '#300d29'];
     ctx.fillStyle = sky[0];
     ctx.fillRect(0, 0, width, height);
 
@@ -33,9 +37,9 @@
       ctx.fillStyle = color;
       ctx.fillRect(x * unit, y * unit, w * unit, h * unit);
     };
-    const distant = light ? 'rgba(72, 106, 101, .28)' : 'rgba(83, 103, 143, .55)';
-    const near = light ? 'rgba(53, 80, 76, .36)' : 'rgba(19, 26, 55, .82)';
-    const accent = light ? 'rgba(104, 137, 69, .38)' : 'rgba(111, 141, 83, .5)';
+    const distant = 'rgba(102, 38, 119, .34)';
+    const near = 'rgba(45, 8, 35, .66)';
+    const accent = 'rgba(190, 24, 103, .30)';
     for (let column = -1; column < Math.ceil(width / unit) + 1; column += 1) {
       const distantHeight = 2 + (((column * 7 + 3) % 4 + 4) % 4);
       block(column, 13 - distantHeight, 1 + (((column + 2) % 3 + 3) % 3), distantHeight, distant);
@@ -61,41 +65,51 @@
       precision mediump float;
       uniform vec2 resolution;
       uniform float time;
-      uniform float lightMode;
+      uniform vec4 seed;
       void main() {
         vec2 screen = gl_FragCoord.xy;
         float pixelSize = max(5.0, length(resolution) / 210.0);
         vec2 uv = (floor(screen / pixelSize) * pixelSize - 0.5 * resolution) / resolution.y;
-        float speed = time * 0.11;
+        uv -= (seed.xy - 0.5) * vec2(0.90, 0.62);
+        float direction = seed.z < 0.5 ? -1.0 : 1.0;
+        float phase = seed.w * 6.2831853;
+        float speed = (time * (0.075 + seed.x * 0.055) + phase) * direction;
         float radius = length(uv);
-        float angle = atan(uv.y, uv.x) + speed * (0.9 + radius * 0.32);
+        float angle = atan(uv.y, uv.x) + speed * (0.85 + radius * (0.22 + seed.y * 0.24));
+        angle += sin(radius * (5.0 + seed.z * 3.0) + phase) * 0.18;
         uv = vec2(cos(angle), sin(angle)) * radius;
         vec2 warped = uv;
         float pulse = 0.0;
+        float shape = 0.85 + seed.y * 0.45;
         for (int i = 0; i < 5; i++) {
-          warped += 0.36 * vec2(cos(warped.y * 3.7 + speed), sin(warped.x * 3.1 - speed));
-          warped += 0.14 * vec2(sin(warped.y * 7.0 + speed * 0.7), cos(warped.x * 6.0 - speed * 0.5));
-          pulse += sin(warped.x * 4.0 + warped.y * 3.0 + speed) * 0.09;
+          warped += 0.36 * vec2(cos(warped.y * 3.7 * shape + speed + phase), sin(warped.x * 3.1 - speed));
+          warped += 0.14 * vec2(sin(warped.y * 7.0 + speed * 0.7), cos(warped.x * 6.0 * shape - speed * 0.5 + phase));
+          pulse += sin(warped.x * 4.0 + warped.y * 3.0 + speed + phase) * 0.09;
         }
         float bands = 0.5 + 0.5 * sin(warped.x * 2.4 - warped.y * 3.4 + radius * 7.0 + pulse);
-        float veins = 0.5 + 0.5 * cos(warped.x * 6.0 + warped.y * 2.2 - speed * 1.4);
-        vec3 darkPurple = vec3(0.055, 0.008, 0.11);
-        vec3 darkRed = vec3(0.25, 0.008, 0.035);
-        vec3 crimson = vec3(0.62, 0.015, 0.12);
-        vec3 neonMagenta = vec3(0.95, 0.025, 0.52);
-        vec3 lightPurple = vec3(0.22, 0.10, 0.30);
-        vec3 lightRed = vec3(0.46, 0.08, 0.12);
-        vec3 lightCrimson = vec3(0.72, 0.16, 0.26);
-        vec3 lightNeon = vec3(0.92, 0.20, 0.58);
-        vec3 c1 = mix(darkPurple, lightPurple, lightMode);
-        vec3 c2 = mix(darkRed, lightRed, lightMode);
-        vec3 c3 = mix(crimson, lightCrimson, lightMode);
-        vec3 c4 = mix(neonMagenta, lightNeon, lightMode);
-        vec3 color = mix(c1, c2, smoothstep(0.04, 0.48, bands));
-        color = mix(color, c3, smoothstep(0.42, 0.78, bands));
-        color = mix(color, c4, smoothstep(0.76, 0.99, bands) * (0.45 + veins * 0.4));
-        color += c4 * pow(max(veins - 0.72, 0.0), 3.0) * 1.8;
-        gl_FragColor = vec4(color, 0.96);
+        float veins = 0.5 + 0.5 * cos(warped.x * 6.0 + warped.y * 2.2 - speed * 1.4 + phase);
+        float palette = fract(bands * 0.40 + veins * 0.24 + radius * 0.13 + seed.x);
+
+        float dPurple = min(abs(palette - 0.02), 1.0 - abs(palette - 0.02));
+        float dViolet = min(abs(palette - 0.21), 1.0 - abs(palette - 0.21));
+        float dRed = min(abs(palette - 0.42), 1.0 - abs(palette - 0.42));
+        float dCrimson = min(abs(palette - 0.63), 1.0 - abs(palette - 0.63));
+        float dMagenta = min(abs(palette - 0.83), 1.0 - abs(palette - 0.83));
+        float wPurple = 1.0 - smoothstep(0.08, 0.23, dPurple);
+        float wViolet = 1.0 - smoothstep(0.08, 0.23, dViolet);
+        float wRed = 1.0 - smoothstep(0.08, 0.23, dRed);
+        float wCrimson = 1.0 - smoothstep(0.08, 0.23, dCrimson);
+        float wMagenta = 1.0 - smoothstep(0.08, 0.23, dMagenta);
+        float total = wPurple + wViolet + wRed + wCrimson + wMagenta;
+
+        vec3 deepPurple = vec3(0.045, 0.004, 0.12);
+        vec3 electricViolet = vec3(0.34, 0.025, 0.72);
+        vec3 darkRed = vec3(0.24, 0.003, 0.025);
+        vec3 crimson = vec3(0.76, 0.012, 0.085);
+        vec3 neonMagenta = vec3(1.0, 0.02, 0.62);
+        vec3 color = (deepPurple * wPurple + electricViolet * wViolet + darkRed * wRed + crimson * wCrimson + neonMagenta * wMagenta) / max(total, 0.001);
+        color += neonMagenta * pow(max(veins - 0.77, 0.0), 2.0) * 0.65;
+        gl_FragColor = vec4(color, 0.97);
       }
     `;
     const compile = (type, source) => {
@@ -119,9 +133,9 @@
     const position = gl.getAttribLocation(program, 'position');
     const resolution = gl.getUniformLocation(program, 'resolution');
     const time = gl.getUniformLocation(program, 'time');
-    const lightMode = gl.getUniformLocation(program, 'lightMode');
+    const seed = gl.getUniformLocation(program, 'seed');
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    swirlState = { gl, program, buffer, position, resolution, time, lightMode, reduced, started: performance.now(), lastFrame: 0 };
+    swirlState = { gl, program, buffer, position, resolution, time, seed, reduced, started: performance.now(), lastFrame: 0 };
     resizeSwirl();
     if (!reduced) requestAnimationFrame(renderSwirl);
     else renderSwirl(performance.now());
@@ -142,36 +156,24 @@
       return;
     }
     swirlState.lastFrame = now;
-    const { gl, program, buffer, position, resolution, time, lightMode, started, reduced } = swirlState;
+    const { gl, program, buffer, position, resolution, time, seed, started, reduced } = swirlState;
     gl.useProgram(program);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.enableVertexAttribArray(position);
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
     gl.uniform2f(resolution, swirlCanvas.width, swirlCanvas.height);
     gl.uniform1f(time, reduced ? 0 : (now - started) / 1000);
-    gl.uniform1f(lightMode, root.dataset.theme === 'light' ? 1 : 0);
+    gl.uniform4fv(seed, shaderSeed);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     if (!reduced) requestAnimationFrame(renderSwirl);
   }
-
-  const savedTheme = localStorage.getItem('7r-theme');
-  if (savedTheme === 'light') root.dataset.theme = 'light';
 
   function renderIcons() {
     if (window.lucide) window.lucide.createIcons({ attrs: { 'stroke-width': 1.7 } });
   }
 
-  function setThemeIcon() {
-    const button = document.querySelector('.theme-toggle');
-    if (!button) return;
-    const icon = root.dataset.theme === 'light' ? 'moon' : 'sun';
-    button.innerHTML = `<i data-lucide="${icon}"></i>`;
-    renderIcons();
-  }
-
   window.addEventListener('DOMContentLoaded', () => {
     renderIcons();
-    setThemeIcon();
     drawGrid();
     initSwirl();
   });
@@ -179,14 +181,6 @@
     drawGrid();
     resizeSwirl();
   }, { passive: true });
-
-  document.querySelector('.theme-toggle')?.addEventListener('click', () => {
-    root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
-    localStorage.setItem('7r-theme', root.dataset.theme || 'dark');
-    setThemeIcon();
-    drawGrid();
-    if (swirlState?.reduced) renderSwirl(performance.now());
-  });
 
   const menuButton = document.querySelector('.menu-toggle');
   const mobileMenu = document.querySelector('.mobile-menu');
